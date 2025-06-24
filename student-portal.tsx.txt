@@ -1,0 +1,424 @@
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { 
+  User, 
+  CreditCard, 
+  TrendingUp, 
+  Calendar, 
+  Phone, 
+  Mail, 
+  MapPin,
+  LogOut,
+  BookOpen,
+  Award,
+  Clock,
+  GraduationCap
+} from "lucide-react";
+import { formatCurrency, formatDate, getFeeStatusBadgeClass, getInitials, getPerformanceGrade } from "@/lib/utils";
+import { useLocation } from "wouter";
+
+interface User {
+  id: number;
+  firstName?: string;
+  lastName?: string;
+  studentName?: string;
+  registryNo: string;
+  class: string;
+  guardianName?: string;
+  type: 'student' | 'parent';
+}
+
+export default function StudentPortal() {
+  const [, setLocation] = useLocation();
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("studentPortalUser");
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    } else {
+      setLocation("/student-login");
+    }
+  }, [setLocation]);
+
+  const { data: profile } = useQuery({
+    queryKey: [`/api/student/${user?.id}/profile`],
+    enabled: !!user?.id,
+  });
+
+  const { data: fees = [] } = useQuery({
+    queryKey: [`/api/student/${user?.id}/fees`],
+    enabled: !!user?.id,
+  });
+
+  const { data: performances = [] } = useQuery({
+    queryKey: [`/api/student/${user?.id}/performance`],
+    enabled: !!user?.id,
+  });
+
+  const handleLogout = () => {
+    localStorage.removeItem("studentPortalUser");
+    setLocation("/student-login");
+  };
+
+  if (!user) {
+    return <div>Loading...</div>;
+  }
+
+  const displayName = user.type === 'student' 
+    ? `${user.firstName} ${user.lastName}` 
+    : user.studentName;
+
+  const totalFees = fees.reduce((sum: number, fee: any) => sum + parseFloat(fee.amount), 0);
+  const paidFees = fees.reduce((sum: number, fee: any) => sum + parseFloat(fee.paidAmount || "0"), 0);
+  const pendingFees = totalFees - paidFees;
+  const overdueFees = fees.filter((fee: any) => fee.status === 'pending' && new Date(fee.dueDate) < new Date());
+
+  const averagePerformance = performances.length > 0 
+    ? performances.reduce((sum: number, p: any) => sum + parseFloat(p.percentage || "0"), 0) / performances.length
+    : 0;
+
+  const recentPerformances = performances.slice(0, 5);
+
+  return (
+    <div className="min-h-screen bg-muted/30">
+      {/* Header */}
+      <header className="bg-card border-b border-border px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+              <GraduationCap className="h-6 w-6 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">MADRASA-E-USMANIYA</h1>
+              <p className="text-sm text-muted-foreground">
+                {user.type === 'student' ? 'Student Portal' : 'Parent Portal'}
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            <div className="text-right">
+              <p className="font-medium text-foreground">{displayName}</p>
+              <p className="text-sm text-muted-foreground">
+                {user.type === 'parent' ? 'Parent' : `Class ${user.class}`}
+              </p>
+            </div>
+            <Avatar>
+              <AvatarFallback>
+                {user.type === 'student' 
+                  ? getInitials(user.firstName || '', user.lastName || '')
+                  : getInitials(user.guardianName || 'Parent', 'User')
+                }
+              </AvatarFallback>
+            </Avatar>
+            <Button variant="ghost" size="icon" onClick={handleLogout}>
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <div className="container mx-auto p-6">
+        {/* Welcome Section */}
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-foreground mb-2">
+            Welcome back, {user.type === 'student' ? user.firstName : user.guardianName}!
+          </h2>
+          <p className="text-muted-foreground">
+            {user.type === 'student' 
+              ? `Here's your academic overview for ${user.class}.`
+              : `Here's ${user.studentName}'s academic overview for ${user.class}.`
+            }
+          </p>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Total Fees</p>
+                  <p className="text-2xl font-bold">{formatCurrency(totalFees)}</p>
+                </div>
+                <CreditCard className="h-8 w-8 text-blue-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Pending Fees</p>
+                  <p className="text-2xl font-bold text-orange-600">{formatCurrency(pendingFees)}</p>
+                </div>
+                <Clock className="h-8 w-8 text-orange-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Average Performance</p>
+                  <p className="text-2xl font-bold text-green-600">{averagePerformance.toFixed(1)}%</p>
+                </div>
+                <TrendingUp className="h-8 w-8 text-green-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Grade</p>
+                  <p className="text-2xl font-bold text-purple-600">{getPerformanceGrade(averagePerformance)}</p>
+                </div>
+                <Award className="h-8 w-8 text-purple-600" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Tabs defaultValue="profile" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="fees">Fee Details</TabsTrigger>
+            <TabsTrigger value="performance">Performance</TabsTrigger>
+            <TabsTrigger value="alerts">Alerts</TabsTrigger>
+          </TabsList>
+
+          {/* Profile Tab */}
+          <TabsContent value="profile">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <User className="h-5 w-5 mr-2" />
+                  {user.type === 'student' ? 'Student Profile' : 'Student Information'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {profile && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Full Name</label>
+                        <p className="text-foreground">{profile.firstName} {profile.lastName}</p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Registry Number</label>
+                        <p className="text-foreground">{profile.registryNo}</p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Class</label>
+                        <p className="text-foreground">{profile.class}</p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Admission Date</label>
+                        <p className="text-foreground">{formatDate(profile.admissionDate)}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Email</label>
+                        <div className="flex items-center">
+                          <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
+                          <p className="text-foreground">{profile.email}</p>
+                        </div>
+                      </div>
+                      {profile.phone && (
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Phone</label>
+                          <div className="flex items-center">
+                            <Phone className="h-4 w-4 mr-2 text-muted-foreground" />
+                            <p className="text-foreground">{profile.phone}</p>
+                          </div>
+                        </div>
+                      )}
+                      {profile.address && (
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Address</label>
+                          <div className="flex items-center">
+                            <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
+                            <p className="text-foreground">{profile.address}</p>
+                          </div>
+                        </div>
+                      )}
+                      {profile.guardianName && (
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Guardian</label>
+                          <p className="text-foreground">{profile.guardianName}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Fees Tab */}
+          <TabsContent value="fees">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <CreditCard className="h-5 w-5 mr-2" />
+                  Fee Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {fees.map((fee: any) => (
+                    <div key={fee.id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-medium capitalize">{fee.feeType} Fee</h3>
+                        <Badge className={getFeeStatusBadgeClass(fee.status)}>
+                          {fee.status}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <label className="text-muted-foreground">Amount</label>
+                          <p className="font-medium">{formatCurrency(fee.amount)}</p>
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground">Paid</label>
+                          <p className="font-medium">{formatCurrency(fee.paidAmount || "0")}</p>
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground">Due Date</label>
+                          <p className="font-medium">{formatDate(fee.dueDate)}</p>
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground">Academic Year</label>
+                          <p className="font-medium">{fee.academicYear}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {fees.length === 0 && (
+                    <p className="text-center text-muted-foreground py-8">No fee records found.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Performance Tab */}
+          <TabsContent value="performance">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <BookOpen className="h-5 w-5 mr-2" />
+                  Academic Performance
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {recentPerformances.map((performance: any) => (
+                    <div key={performance.id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-medium">{performance.subject}</h3>
+                        <Badge variant="outline">
+                          {getPerformanceGrade(parseFloat(performance.percentage))}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                        <div>
+                          <label className="text-muted-foreground">Exam Type</label>
+                          <p className="font-medium capitalize">{performance.examType}</p>
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground">Marks</label>
+                          <p className="font-medium">{performance.obtainedMarks}/{performance.maxMarks}</p>
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground">Percentage</label>
+                          <p className="font-medium">{performance.percentage}%</p>
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground">Term</label>
+                          <p className="font-medium capitalize">{performance.term}</p>
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground">Year</label>
+                          <p className="font-medium">{performance.academicYear}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {performances.length === 0 && (
+                    <p className="text-center text-muted-foreground py-8">No performance records found.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Alerts Tab */}
+          <TabsContent value="alerts">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Calendar className="h-5 w-5 mr-2" />
+                  Important Alerts
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {overdueFees.length > 0 && (
+                    <div className="border border-red-200 bg-red-50 rounded-lg p-4">
+                      <h3 className="font-medium text-red-800 mb-2">Overdue Fees</h3>
+                      <p className="text-red-700 text-sm">
+                        You have {overdueFees.length} overdue fee(s). Please contact the administration for payment.
+                      </p>
+                    </div>
+                  )}
+                  
+                  {pendingFees > 0 && (
+                    <div className="border border-amber-200 bg-amber-50 rounded-lg p-4">
+                      <h3 className="font-medium text-amber-800 mb-2">Pending Fees</h3>
+                      <p className="text-amber-700 text-sm">
+                        Total pending fees: {formatCurrency(pendingFees)}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {averagePerformance < 60 && performances.length > 0 && (
+                    <div className="border border-orange-200 bg-orange-50 rounded-lg p-4">
+                      <h3 className="font-medium text-orange-800 mb-2">Academic Alert</h3>
+                      <p className="text-orange-700 text-sm">
+                        Your average performance is below 60%. Please speak with your teachers for additional support.
+                      </p>
+                    </div>
+                  )}
+                  
+                  {overdueFees.length === 0 && pendingFees === 0 && averagePerformance >= 60 && (
+                    <div className="border border-green-200 bg-green-50 rounded-lg p-4">
+                      <h3 className="font-medium text-green-800 mb-2">All Good!</h3>
+                      <p className="text-green-700 text-sm">
+                        No alerts at this time. Keep up the great work!
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
